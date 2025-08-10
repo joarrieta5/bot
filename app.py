@@ -5,21 +5,22 @@ import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from statsmodels.tsa.arima.model import ARIMA
+from streamlit_autorefresh import st_autorefresh
 import time
 
 st.set_page_config(page_title="Análisis de Multiplicadores - Auto Update", layout="wide")
 st.title("📊 Análisis y Predicción de Multiplicadores (Actualización automática)")
 
+# Frecuencia de actualización en milisegundos
+REFRESH_RATE_MS = 5000  # 5 segundos
+
+# Contador de refresco automático
+st_autorefresh(interval=REFRESH_RATE_MS, key="datarefresh")
+
 # Función para simular un nuevo multiplicador cercano al último valor
 def simular_nuevo_multiplicador(ultimo, scale=0.2):
     nuevo = np.random.normal(loc=ultimo, scale=scale*ultimo)
     return max(1, round(nuevo, 2))
-
-REFRESH_RATE = 5  # segundos
-
-# Inicializar countdown en session_state
-if "countdown" not in st.session_state:
-    st.session_state.countdown = REFRESH_RATE
 
 # Subida inicial de CSV y carga a session_state
 if "df" not in st.session_state:
@@ -33,29 +34,25 @@ if "df" not in st.session_state:
         df = df.dropna(subset=["multiplicador"]).reset_index(drop=True)
         st.session_state.df = df.copy()
         st.session_state.last_time = time.time()
-        st.experimental_rerun()
     else:
         st.info("Sube un CSV para comenzar.")
         st.stop()
 
 df = st.session_state.df.copy()
 
-# Control del tiempo para añadir nuevo dato
+# Añadir nuevo dato cada REFRESH_RATE_MS segundos
 current_time = time.time()
-if ("last_time" not in st.session_state) or (current_time - st.session_state.last_time > REFRESH_RATE):
+if ("last_time" not in st.session_state) or (current_time - st.session_state.last_time > REFRESH_RATE_MS / 1000):
     ultimo = df["multiplicador"].iloc[-1]
     nuevo = simular_nuevo_multiplicador(ultimo)
     nuevo_fila = pd.DataFrame({"multiplicador": [nuevo]})
     df = pd.concat([df, nuevo_fila], ignore_index=True)
     st.session_state.df = df
     st.session_state.last_time = current_time
-    st.session_state.countdown = REFRESH_RATE
-else:
-    # Decrementar countdown según tiempo transcurrido
-    elapsed = current_time - st.session_state.last_time
-    st.session_state.countdown = max(0, int(REFRESH_RATE - elapsed))
 
-st.markdown(f"⏳ Próxima actualización en **{st.session_state.countdown} segundos**")
+# Mostrar cuenta regresiva aproximada (opcional)
+tiempo_restante = max(0, REFRESH_RATE_MS / 1000 - (time.time() - st.session_state.last_time))
+st.markdown(f"⏳ Próxima actualización en **{int(tiempo_restante)} segundos**")
 
 # Mostrar datos actualizados
 st.subheader("Multiplicadores históricos (últimos 20)")
@@ -153,6 +150,3 @@ ax.plot(bal_mart, label="Martingala parcial")
 ax.set_title("Evolución del balance")
 ax.legend()
 st.pyplot(fig)
-
-# Forzar refresco automático
-st.experimental_rerun()
