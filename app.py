@@ -12,15 +12,14 @@ st.title("📊 Análisis y Predicción de Multiplicadores (Actualización autom�
 
 # Función para simular un nuevo multiplicador cercano al último valor
 def simular_nuevo_multiplicador(ultimo, scale=0.2):
-    # Genera un valor normal centrado en ultimo, con desviación scale*ultimo
     nuevo = np.random.normal(loc=ultimo, scale=scale*ultimo)
-    # No puede ser menor a 1 (mínimo arbitrario)
     return max(1, round(nuevo, 2))
 
-# Para refrescar la app cada 5 segundos
 REFRESH_RATE = 5  # segundos
-countdown = st.experimental_get_query_params().get("countdown", [str(REFRESH_RATE)])[0]
-countdown = int(countdown)
+
+# Inicializar countdown en session_state
+if "countdown" not in st.session_state:
+    st.session_state.countdown = REFRESH_RATE
 
 # Subida inicial de CSV y carga a session_state
 if "df" not in st.session_state:
@@ -33,31 +32,30 @@ if "df" not in st.session_state:
         df["multiplicador"] = pd.to_numeric(df["multiplicador"], errors="coerce")
         df = df.dropna(subset=["multiplicador"]).reset_index(drop=True)
         st.session_state.df = df.copy()
-        st.experimental_set_query_params(countdown=str(REFRESH_RATE))
+        st.session_state.last_time = time.time()
         st.experimental_rerun()
     else:
         st.info("Sube un CSV para comenzar.")
         st.stop()
 
-# Cuando ya tenemos df en session_state:
 df = st.session_state.df.copy()
 
-# Simular nuevo multiplicador cada REFRESH_RATE segundos
-last_time = st.session_state.get("last_time", 0)
+# Control del tiempo para añadir nuevo dato
 current_time = time.time()
-if current_time - last_time > REFRESH_RATE:
+if ("last_time" not in st.session_state) or (current_time - st.session_state.last_time > REFRESH_RATE):
     ultimo = df["multiplicador"].iloc[-1]
     nuevo = simular_nuevo_multiplicador(ultimo)
     nuevo_fila = pd.DataFrame({"multiplicador": [nuevo]})
     df = pd.concat([df, nuevo_fila], ignore_index=True)
     st.session_state.df = df
     st.session_state.last_time = current_time
+    st.session_state.countdown = REFRESH_RATE
+else:
+    # Decrementar countdown según tiempo transcurrido
+    elapsed = current_time - st.session_state.last_time
+    st.session_state.countdown = max(0, int(REFRESH_RATE - elapsed))
 
-st.markdown(f"⏳ Próxima actualización en **{countdown} segundos**")
-countdown -= 1
-if countdown <= 0:
-    countdown = REFRESH_RATE
-st.experimental_set_query_params(countdown=str(countdown))
+st.markdown(f"⏳ Próxima actualización en **{st.session_state.countdown} segundos**")
 
 # Mostrar datos actualizados
 st.subheader("Multiplicadores históricos (últimos 20)")
